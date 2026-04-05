@@ -496,6 +496,45 @@ void shufflePlaylist(Playlist *pl)
     printf("Playlist shuffled.\n");
 }
 
+void restoreSortedOrder(Playlist *pl)
+{
+    if (pl->size < 2)
+    {
+        printf("Not enough songs to reorder.\n");
+        return;
+    }
+
+    Song **arr = toArray(pl);
+    if (!arr)
+        return;
+
+    // Bubble sort by Song ID
+    int i, j;
+    for (i = 0; i < pl->size - 1; i++)
+    {
+        for (j = 0; j < pl->size - 1 - i; j++)
+        {
+            if (arr[j]->id > arr[j + 1]->id)
+            {
+                Song *tmp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = tmp;
+            }
+        }
+    }
+
+    // Rebuild linked list from sorted array
+    for (i = 0; i < pl->size; i++)
+    {
+        arr[i]->prev = (i > 0) ? arr[i - 1] : NULL;
+        arr[i]->next = (i < pl->size - 1) ? arr[i + 1] : NULL;
+    }
+    pl->head = arr[0];
+    pl->tail = arr[pl->size - 1];
+    free(arr);
+    printf("Playlist restored to sorted order (by Song ID).\n");
+}
+
 void repeatDisplay(Playlist *pl)
 {
     if (pl->size == 0)
@@ -827,6 +866,7 @@ void printMenu()
     printf(" 22.  Intersection of Playlists\n");
     printf(" 23.  Difference (P1 - P2)\n");
     printf(" 24.  Symmetric Difference\n");
+    printf(" 25.  Restore Sorted Order\n");
     printf("  0.  Exit\n");
     printf("-----------------------------------------\n");
     printf("Enter choice: ");
@@ -1115,13 +1155,17 @@ int main()
                 }
             }
         }
+        else if (choice == 25)
+        {
+            restoreSortedOrder(active);
+        }
         else if (choice == 0)
         {
             printf("Goodbye!\n");
         }
         else
         {
-            printf("Invalid choice! Enter 0-24.\n");
+            printf("Invalid choice! Enter 0-25.\n");
         }
     } while (choice != 0);
 
