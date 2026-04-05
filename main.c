@@ -4,6 +4,7 @@
 #include <time.h>
 
 #define MAX_LEN 100
+#define MAX_PLAYLISTS 50
 
 // Song node (Doubly Linked List)
 typedef struct Song
@@ -17,6 +18,7 @@ typedef struct Song
 // Playlist
 typedef struct
 {
+    char name[MAX_LEN];
     Song *head, *tail, *current;
     int size;
 } Playlist;
@@ -31,21 +33,15 @@ typedef struct HistoryNode
 } HistoryNode;
 
 // Globals
-Playlist pl1 = {NULL, NULL, NULL, 0};
-Playlist pl2 = {NULL, NULL, NULL, 0};
-Playlist *active;
+Playlist *playlists[MAX_PLAYLISTS];
+int playlistCount = 0;
+Playlist *active = NULL;
+int activeIndex = 0;
 HistoryNode *historyTop = NULL;
 int historyCount = 0;
 int repeatMode = 0;
 
 // --- Utility ---
-
-void flushInput()
-{
-    int c;
-    while ((c = getchar()) != '\n' && c != EOF)
-        ;
-}
 
 void readString(char *str, int maxLen)
 {
@@ -75,23 +71,27 @@ int cmpIgnoreCase(const char *a, const char *b)
 int containsSubstr(const char *str, const char *sub)
 {
     int i, j, slen = strlen(str), sublen = strlen(sub);
+    int found = 0;
     if (sublen == 0)
         return 1;
-    for (i = 0; i <= slen - sublen; i++)
+    i = 0;
+    while (i <= slen - sublen && !found)
     {
         int match = 1;
-        for (j = 0; j < sublen; j++)
+        j = 0;
+        while (j < sublen && match)
         {
             if (toLowerChar(str[i + j]) != toLowerChar(sub[j]))
-            {
                 match = 0;
-                break;
-            }
+            else
+                j++;
         }
         if (match)
-            return 1;
+            found = 1;
+        else
+            i++;
     }
-    return 0;
+    return found;
 }
 
 // --- Song/Playlist Functions ---
@@ -588,7 +588,58 @@ Playlist *createEmptyPlaylist()
     }
     pl->head = pl->tail = pl->current = NULL;
     pl->size = 0;
+    pl->name[0] = '\0';
     return pl;
+}
+
+Playlist *createNamedPlaylist(const char *name)
+{
+    Playlist *pl = createEmptyPlaylist();
+    if (pl)
+        strcpy(pl->name, name);
+    return pl;
+}
+
+int addPlaylistToSystem(Playlist *pl)
+{
+    if (playlistCount >= MAX_PLAYLISTS)
+    {
+        printf("Maximum number of playlists reached!\n");
+        return 0;
+    }
+    playlists[playlistCount] = pl;
+    playlistCount++;
+    return 1;
+}
+
+void listAllPlaylists()
+{
+    int i;
+    printf("\n--- All Playlists ---\n");
+    for (i = 0; i < playlistCount; i++)
+    {
+        printf("  %d. %s (%d songs)%s\n", i + 1, playlists[i]->name,
+               playlists[i]->size, (playlists[i] == active) ? "  <-- ACTIVE" : "");
+    }
+    printf("\n");
+}
+
+// Select a playlist by number (returns index, or -1 on failure)
+int selectPlaylist(const char *prompt)
+{
+    int sel;
+    listAllPlaylists();
+    printf("%s", prompt);
+    if (scanf("%d", &sel) != 1 || sel < 1 || sel > playlistCount)
+    {
+        printf("Invalid selection!\n");
+        scanf("%*[^\n]");
+        scanf("%*c");
+        return -1;
+    }
+    scanf("%*[^\n]");
+    scanf("%*c");
+    return sel - 1;
 }
 
 Playlist *unionPlaylists(Playlist *p1, Playlist *p2)
@@ -750,8 +801,7 @@ void printMenu()
     printf("   Music Playlist Management System\n");
     printf("=========================================\n");
     printf("  Active: %s | Songs: %d | Repeat: %s\n",
-           (active == &pl1) ? "Playlist 1" : "Playlist 2",
-           active->size, repeatMode ? "ON" : "OFF");
+           active->name, active->size, repeatMode ? "ON" : "OFF");
     printf("-----------------------------------------\n");
     printf("  1.  Add Song\n");
     printf("  2.  Delete Song\n");
@@ -771,10 +821,12 @@ void printMenu()
     printf(" 16.  Display History (Chronological)\n");
     printf(" 17.  Display History (Reverse)\n");
     printf(" 18.  Switch Active Playlist\n");
-    printf(" 19.  Union of Playlists\n");
-    printf(" 20.  Intersection of Playlists\n");
-    printf(" 21.  Difference (P1 - P2)\n");
-    printf(" 22.  Symmetric Difference\n");
+    printf(" 19.  Create New Playlist\n");
+    printf(" 20.  List All Playlists\n");
+    printf(" 21.  Union of Playlists\n");
+    printf(" 22.  Intersection of Playlists\n");
+    printf(" 23.  Difference (P1 - P2)\n");
+    printf(" 24.  Symmetric Difference\n");
     printf("  0.  Exit\n");
     printf("-----------------------------------------\n");
     printf("Enter choice: ");
@@ -785,9 +837,45 @@ void printMenu()
 int main()
 {
     srand((unsigned)time(NULL));
-    active = &pl1;
 
-    int choice, id;
+    // --- Requirement 4: Pre-load two playlists with 10 songs each ---
+
+    Playlist *pl1 = createNamedPlaylist("Rock Classics");
+    addPlaylistToSystem(pl1);
+    addSong(pl1, 101, "Bohemian Rhapsody", "Queen");
+    addSong(pl1, 102, "Stairway to Heaven", "Led Zeppelin");
+    addSong(pl1, 103, "Hotel California", "Eagles");
+    addSong(pl1, 104, "Comfortably Numb", "Pink Floyd");
+    addSong(pl1, 105, "Sweet Child O Mine", "Guns N Roses");
+    addSong(pl1, 106, "Back in Black", "AC/DC");
+    addSong(pl1, 107, "Smells Like Teen Spirit", "Nirvana");
+    addSong(pl1, 108, "Wish You Were Here", "Pink Floyd");
+    addSong(pl1, 109, "Paint It Black", "The Rolling Stones");
+    addSong(pl1, 110, "Thunderstruck", "AC/DC");
+
+    Playlist *pl2 = createNamedPlaylist("Pop Hits");
+    addPlaylistToSystem(pl2);
+    addSong(pl2, 201, "Shape of You", "Ed Sheeran");
+    addSong(pl2, 202, "Blinding Lights", "The Weeknd");
+    addSong(pl2, 203, "Uptown Funk", "Bruno Mars");
+    addSong(pl2, 204, "Rolling in the Deep", "Adele");
+    addSong(pl2, 205, "Bad Guy", "Billie Eilish");
+    addSong(pl2, 103, "Hotel California", "Eagles");
+    addSong(pl2, 206, "Levitating", "Dua Lipa");
+    addSong(pl2, 107, "Smells Like Teen Spirit", "Nirvana");
+    addSong(pl2, 207, "Dynamite", "BTS");
+    addSong(pl2, 208, "Stay", "The Kid LAROI");
+
+    active = pl1;
+    activeIndex = 0;
+
+    printf("Pre-loaded '%s' with %d songs.\n", pl1->name, pl1->size);
+    printf("Pre-loaded '%s' with %d songs.\n", pl2->name, pl2->size);
+
+    // --- Main menu loop (no break, no switch, no flushInput) ---
+
+    int choice = -1;
+    int id;
     char title[MAX_LEN], artist[MAX_LEN];
 
     do
@@ -796,164 +884,254 @@ int main()
         if (scanf("%d", &choice) != 1)
         {
             printf("Invalid input! Please enter a number.\n");
-            flushInput();
-            continue;
+            scanf("%*[^\n]");
+            scanf("%*c");
+            choice = -1;
         }
-        flushInput();
-
-        switch (choice)
+        else if (choice == 1)
         {
-        case 1:
             printf("Enter Song ID: ");
             if (scanf("%d", &id) != 1)
             {
                 printf("Invalid ID!\n");
-                flushInput();
-                break;
-            }
-            flushInput();
-            printf("Enter Title: ");
-            readString(title, MAX_LEN);
-            printf("Enter Artist: ");
-            readString(artist, MAX_LEN);
-            if (strlen(title) == 0 || strlen(artist) == 0)
-            {
-                printf("Title and Artist cannot be empty!\n");
+                scanf("%*[^\n]");
+                scanf("%*c");
             }
             else
             {
-                int res = addSong(active, id, title, artist);
-                if (res == 1)
-                    printf("Song added successfully.\n");
-                else if (res == 0)
-                    printf("Song with ID %d already exists!\n", id);
+                scanf("%*c"); /* consume newline after ID */
+                printf("Enter Title: ");
+                readString(title, MAX_LEN);
+                printf("Enter Artist: ");
+                readString(artist, MAX_LEN);
+                if (strlen(title) == 0 || strlen(artist) == 0)
+                {
+                    printf("Title and Artist cannot be empty!\n");
+                }
+                else
+                {
+                    int res = addSong(active, id, title, artist);
+                    if (res == 1)
+                        printf("Song added successfully.\n");
+                    else if (res == 0)
+                        printf("Song with ID %d already exists!\n", id);
+                }
             }
-            break;
-
-        case 2:
+        }
+        else if (choice == 2)
+        {
             printf("Enter Song ID to delete: ");
             if (scanf("%d", &id) != 1)
             {
                 printf("Invalid ID!\n");
-                flushInput();
-                break;
+                scanf("%*[^\n]");
+                scanf("%*c");
             }
-            flushInput();
-            if (!deleteSong(active, id))
-                printf("Song with ID %d not found.\n", id);
-            break;
-
-        case 3:
+            else
+            {
+                scanf("%*[^\n]");
+                scanf("%*c");
+                if (!deleteSong(active, id))
+                    printf("Song with ID %d not found.\n", id);
+            }
+        }
+        else if (choice == 3)
+        {
             displayPlaylist(active);
-            break;
-        case 4:
+        }
+        else if (choice == 4)
+        {
             displaySorted(active, 1);
-            break;
-        case 5:
+        }
+        else if (choice == 5)
+        {
             displaySorted(active, 2);
-            break;
-        case 6:
+        }
+        else if (choice == 6)
+        {
             displaySorted(active, 3);
-            break;
-
-        case 7:
+        }
+        else if (choice == 7)
+        {
             printf("Enter Song ID: ");
             if (scanf("%d", &id) != 1)
             {
                 printf("Invalid ID!\n");
-                flushInput();
-                break;
+                scanf("%*[^\n]");
+                scanf("%*c");
             }
-            flushInput();
-            searchByID(active, id);
-            break;
-
-        case 8:
+            else
+            {
+                scanf("%*[^\n]");
+                scanf("%*c");
+                searchByID(active, id);
+            }
+        }
+        else if (choice == 8)
+        {
+            scanf("%*c"); /* consume newline */
             printf("Enter Title: ");
             readString(title, MAX_LEN);
             searchByTitle(active, title);
-            break;
-
-        case 9:
+        }
+        else if (choice == 9)
+        {
+            scanf("%*c"); /* consume newline */
             printf("Enter Artist: ");
             readString(artist, MAX_LEN);
             searchByArtist(active, artist);
-            break;
-
-        case 10:
+        }
+        else if (choice == 10)
+        {
             playNext(active);
-            break;
-        case 11:
+        }
+        else if (choice == 11)
+        {
             playPrev(active);
-            break;
-        case 12:
+        }
+        else if (choice == 12)
+        {
             shufflePlaylist(active);
-            break;
-
-        case 13:
+        }
+        else if (choice == 13)
+        {
             repeatMode = !repeatMode;
             printf("Repeat mode: %s\n", repeatMode ? "ON" : "OFF");
-            break;
-
-        case 14:
+        }
+        else if (choice == 14)
+        {
             showNowPlaying(active);
-            break;
-        case 15:
+        }
+        else if (choice == 15)
+        {
             repeatDisplay(active);
-            break;
-        case 16:
+        }
+        else if (choice == 16)
+        {
             displayHistoryChrono();
-            break;
-        case 17:
+        }
+        else if (choice == 17)
+        {
             displayHistoryReverse();
-            break;
-
-        case 18:
-            active = (active == &pl1) ? &pl2 : &pl1;
-            printf("Switched to %s.\n", (active == &pl1) ? "Playlist 1" : "Playlist 2");
-            break;
-
-        case 19:
-        {
-            Playlist *r = unionPlaylists(&pl1, &pl2);
-            printf("\n--- Union of Playlist 1 and Playlist 2 ---\n");
-            displayAndFree(r);
-            break;
         }
-        case 20:
+        else if (choice == 18)
         {
-            Playlist *r = intersectionPlaylists(&pl1, &pl2);
-            printf("\n--- Intersection ---\n");
-            displayAndFree(r);
-            break;
+            int sel = selectPlaylist("Select playlist to switch to: ");
+            if (sel >= 0)
+            {
+                activeIndex = sel;
+                active = playlists[activeIndex];
+                printf("Switched to '%s'.\n", active->name);
+            }
         }
-        case 21:
+        else if (choice == 19)
         {
-            Playlist *r = differencePlaylists(&pl1, &pl2);
-            printf("\n--- Difference (P1 - P2) ---\n");
-            displayAndFree(r);
-            break;
+            if (playlistCount >= MAX_PLAYLISTS)
+            {
+                printf("Maximum number of playlists reached!\n");
+            }
+            else
+            {
+                scanf("%*c"); /* consume newline */
+                printf("Enter name for new playlist: ");
+                char pname[MAX_LEN];
+                readString(pname, MAX_LEN);
+                if (strlen(pname) == 0)
+                {
+                    printf("Playlist name cannot be empty!\n");
+                }
+                else
+                {
+                    Playlist *np = createNamedPlaylist(pname);
+                    if (np)
+                    {
+                        addPlaylistToSystem(np);
+                        printf("Playlist '%s' created (Playlist #%d).\n", pname, playlistCount);
+                    }
+                }
+            }
         }
-        case 22:
+        else if (choice == 20)
         {
-            Playlist *r = symDifferencePlaylists(&pl1, &pl2);
-            printf("\n--- Symmetric Difference ---\n");
-            displayAndFree(r);
-            break;
+            listAllPlaylists();
         }
-
-        case 0:
+        else if (choice == 21)
+        {
+            printf("--- Union of Two Playlists ---\n");
+            int s1 = selectPlaylist("Select first playlist: ");
+            if (s1 >= 0)
+            {
+                int s2 = selectPlaylist("Select second playlist: ");
+                if (s2 >= 0)
+                {
+                    Playlist *r = unionPlaylists(playlists[s1], playlists[s2]);
+                    printf("\n--- Union of '%s' and '%s' ---\n", playlists[s1]->name, playlists[s2]->name);
+                    displayAndFree(r);
+                }
+            }
+        }
+        else if (choice == 22)
+        {
+            printf("--- Intersection of Two Playlists ---\n");
+            int s1 = selectPlaylist("Select first playlist: ");
+            if (s1 >= 0)
+            {
+                int s2 = selectPlaylist("Select second playlist: ");
+                if (s2 >= 0)
+                {
+                    Playlist *r = intersectionPlaylists(playlists[s1], playlists[s2]);
+                    printf("\n--- Intersection of '%s' and '%s' ---\n", playlists[s1]->name, playlists[s2]->name);
+                    displayAndFree(r);
+                }
+            }
+        }
+        else if (choice == 23)
+        {
+            printf("--- Difference (P1 - P2) ---\n");
+            int s1 = selectPlaylist("Select P1: ");
+            if (s1 >= 0)
+            {
+                int s2 = selectPlaylist("Select P2: ");
+                if (s2 >= 0)
+                {
+                    Playlist *r = differencePlaylists(playlists[s1], playlists[s2]);
+                    printf("\n--- Difference '%s' - '%s' ---\n", playlists[s1]->name, playlists[s2]->name);
+                    displayAndFree(r);
+                }
+            }
+        }
+        else if (choice == 24)
+        {
+            printf("--- Symmetric Difference ---\n");
+            int s1 = selectPlaylist("Select first playlist: ");
+            if (s1 >= 0)
+            {
+                int s2 = selectPlaylist("Select second playlist: ");
+                if (s2 >= 0)
+                {
+                    Playlist *r = symDifferencePlaylists(playlists[s1], playlists[s2]);
+                    printf("\n--- Symmetric Difference of '%s' and '%s' ---\n", playlists[s1]->name, playlists[s2]->name);
+                    displayAndFree(r);
+                }
+            }
+        }
+        else if (choice == 0)
+        {
             printf("Goodbye!\n");
-            break;
-        default:
-            printf("Invalid choice! Enter 0-22.\n");
-            break;
+        }
+        else
+        {
+            printf("Invalid choice! Enter 0-24.\n");
         }
     } while (choice != 0);
 
-    // Cleanup
-    freePlaylist(&pl1);
-    freePlaylist(&pl2);
+    // Cleanup all playlists
+    int i;
+    for (i = 0; i < playlistCount; i++)
+    {
+        freePlaylist(playlists[i]);
+        free(playlists[i]);
+    }
     freeHistory();
     return 0;
 }
